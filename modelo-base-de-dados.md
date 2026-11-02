@@ -25,8 +25,6 @@
 - atualizadoEm
 - *papelId*
 
------------------------------------
-
 ## Perfil
 - id
 - nome
@@ -40,7 +38,6 @@
 - atualizadoEm
 - *usuarioId*
 
------------------------------------
 - ADMIN DIRECTOR SUBDIRETOR_PEDAGOGICO PROFESSOR ESTUDANTE SECRETARIA
 
 
@@ -50,16 +47,12 @@
 - criadoEm
 - atualizadoEm
 
------------------------------------
-
 ## Classe
 - id
 - nome
 - nivel
 - criadoEm
 - atualizadoEm
-
------------------------------------
 
 ## Ano Lectivo
 - id
@@ -70,16 +63,12 @@
 - criadoEm
 - atualizadoEm
 
------------------------------------
-
 ## Curso
 - id
 - nome
 - codigo
 - criadoEm
 - atualizadoEm
-
------------------------------------
 
 ## Turma
 - id
@@ -93,8 +82,6 @@
 - criadoEm
 - atualizadoEm
 
------------------------------------
-
 ## Disciplina
 - id
 - nome
@@ -104,8 +91,6 @@
 - estado
 - criadoEm
 - atualizadoEm
-
------------------------------------
 
 ## Estudante
 - id
