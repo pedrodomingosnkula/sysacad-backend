@@ -13,6 +13,7 @@
 - [x] Disciplinas
 - [x] Faltas
 - [x] Papel
+- [x] Documentos
 
 
 ## Usuario
