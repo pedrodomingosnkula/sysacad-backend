@@ -3,15 +3,15 @@
 - [x] Estudantes
 - [x] Usuário
 - [x] Perfil
-- [ ] Matrícula
+- [x] Matrícula
 - [x] Curso
-- [ ] Notas
+- [x] Notas
 - [ ] Histórico
 - [x] Turma
 - [x] Ano Lectivo
 - [x] Classe
 - [x] Disciplinas
-- [ ] Faltas
+- [x] Faltas
 - [x] Papel
 
 
@@ -97,5 +97,36 @@
 - numeroProcesso
 - *perfilId*
 - estado
+- criadoEm
+- atualizadoEm
+
+## Matrícula
+- id
+- *estudanteId*
+- *turmaId*
+- dataMatricula
+- estado
+- tipo
+- criadoEm
+- AtualizadoEm
+
+## Faltas
+- id
+- *matriculaId*
+- *disciplina*
+- data
+- justificada
+- motivo
+- registadoPorUsuarioId
+- criadoEm
+- atualizadoEm
+
+## Notas
+- id
+- *matriculaId*
+- *disciplina*
+- *lancadoPorUsuarioId*
+- tipo
+- valor
 - criadoEm
 - atualizadoEm
