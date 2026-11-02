@@ -92,6 +92,23 @@
 - criadoEm
 - atualizadoEm
 
+## DisciplinaTurma
+- id
+- *turmaId*
+- *disciplinaId*
+- *professorId*
+- cargaHoraria
+- estado
+- criadoEm
+- atualizadoEm
+
+## ProfessorDisciplina
+- id
+- *professorId*
+- *disciplinaId*
+- criadoEm
+- atualizadoEm
+
 ## Estudante
 - id
 - numeroProcesso
@@ -113,7 +130,7 @@
 ## Faltas
 - id
 - *matriculaId*
-- *disciplina*
+- *disciplinaId*
 - data
 - justificada
 - motivo
@@ -128,5 +145,20 @@
 - *lancadoPorUsuarioId*
 - tipo
 - valor
+- criadoEm
+- atualizadoEm
+
+## Documento
+- id
+- titulo
+- descricao
+- nomeFicheiro
+- caminhoFicheiro
+- tipo
+- formato
+- tamanho
+- usuarioId
+- enviadoPorUsuarioId
+- estado
 - criadoEm
 - atualizadoEm
