@@ -1,41 +1,125 @@
-import { pgEnum, date, serial, pgTable, text, timestamp, uuid, varchar, integer, smallint, primaryKey, boolean, unique, numeric } from "drizzle-orm/pg-core";
+import {
+  pgEnum,
+  pgTable,
+  date,
+  serial,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+  integer,
+  smallint,
+  boolean,
+  numeric,
+  primaryKey,
+  unique,
+  index,
+  uniqueIndex,
+  check,
+  foreignKey,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
+// =====================================================================
+// HELPERS REUTILIZÁVEIS
+// =====================================================================
 
-// ENUM'S
+const timestamps = {
+  criadoEm: timestamp("criado_em", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  atualizadoEm: timestamp("atualizado_em", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+};
+
+// Soft delete: em vez de apagar, preenche-se deletado_em.
+// Lembra-te de filtrar `deletadoEm IS NULL` nas consultas.
+const softDelete = {
+  deletadoEm: timestamp("deletado_em", { withTimezone: true }),
+};
+
+// =====================================================================
+// ENUMS
+// =====================================================================
 
 export const enumGenero = pgEnum("enum_genero", ["M", "F"]);
 export const enumTurno = pgEnum("enum_turno", ["MANHA", "TARDE", "NOITE"]);
 
+export const enumEstadoMatricula = pgEnum("enum_estado_matricula", [
+  "ATIVA",
+  "CONCLUIDA",
+  "ANULADA",
+  "TRANSFERIDA",
+]);
+
+export const enumTipoMatricula = pgEnum("enum_tipo_matricula", [
+  "NOVA",
+  "CONFIRMACAO",
+  "TRANSFERENCIA",
+]);
+
+export const enumTipoNota = pgEnum("enum_tipo_nota", [
+  "MAC", // Média de Avaliação Contínua
+  "PP", // Prova do Professor
+  "PT", // Prova Trimestral
+  "EXAME",
+]);
+
+export const enumTipoDocumento = pgEnum("enum_tipo_documento", [
+  "BILHETE_IDENTIDADE",
+  "CERTIFICADO_HABILITACOES",
+  "DECLARACAO",
+  "CERTIDAO_NASCIMENTO",
+  "COMPROVATIVO_PAGAMENTO",
+  "FOTOGRAFIA",
+  "OUTRO",
+]);
+
+export const enumEstadoDocumento = pgEnum("enum_estado_documento", [
+  "PENDENTE",
+  "VALIDADO",
+  "REJEITADO",
+]);
+
+// =====================================================================
 // USUÁRIOS
+// =====================================================================
 
-export const usuarios = pgTable("usuarios", {
-  id: uuid().primaryKey().defaultRandom(),
+export const usuarios = pgTable(
+  "usuarios",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
 
-  email: varchar("email", { length: 200 })
-    .notNull()
-    .unique(),
+    // Normaliza para minúsculas na aplicação; o índice abaixo é a rede de segurança
+    email: varchar("email", { length: 200 }).notNull(),
 
-  senha: text("senha")
-    .notNull(),
+    // Guardar SEMPRE o hash (argon2/bcrypt), nunca a senha em texto simples
+    senhaHash: text("senha_hash").notNull(),
 
-  estado: boolean("estado").default(true),
+    estado: boolean("estado").notNull().default(true),
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
+    ...timestamps,
+    ...softDelete,
+  },
+  (t) => [
+    // "Ana@x.com" e "ana@x.com" contam como o mesmo email
+    uniqueIndex("uq_usuarios_email_lower").on(sql`lower(${t.email})`),
+  ]
+);
 
-
+// =====================================================================
 // PERFIS
+// =====================================================================
 
 export const perfis = pgTable("perfis", {
-  id: uuid().primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
 
-  nomeProprio: varchar("nome", { length: 100 })
-    .notNull(),
+  nomeProprio: varchar("nome_proprio", { length: 100 }).notNull(),
+  sobrenome: varchar("sobrenome", { length: 200 }).notNull(),
 
-  sobrenome: varchar("sobrenome", { length: 200 })
-    .notNull(),
-
+  // Formato BI angolano (9 dígitos + 2 letras + 3 dígitos): validar na aplicação
   bilheteIdentidade: varchar("bilhete_identidade", { length: 20 })
     .notNull()
     .unique(),
@@ -50,366 +134,512 @@ export const perfis = pgTable("perfis", {
 
   genero: enumGenero("genero"),
 
-  usuarioId: uuid("usuario_id").unique().references(() => usuarios.id),
+  // Nullable: pode existir perfil sem conta de acesso
+  usuarioId: uuid("usuario_id")
+    .unique()
+    .references(() => usuarios.id, { onDelete: "set null" }),
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
+  ...timestamps,
+  ...softDelete,
+});
 
-
-// PAPEIS
-
+// =====================================================================
+// PAPÉIS
+// =====================================================================
 
 export const papeis = pgTable("papeis", {
-  id: uuid().primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
 
-  nome: varchar("nome", { length: 100 })
-    .notNull(),
+  nome: varchar("nome", { length: 100 }).notNull().unique(),
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
+  ...timestamps,
+});
 
+// =====================================================================
+// USUÁRIOS_PAPÉIS
+// =====================================================================
 
-// USUARIOS_PAPEIS
+export const usuariosPapeis = pgTable(
+  "usuarios_papeis",
+  {
+    usuarioId: uuid("usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "cascade" }),
 
+    papelId: uuid("papel_id")
+      .notNull()
+      .references(() => papeis.id, { onDelete: "cascade" }),
 
-export const usuariosPapeis = pgTable("usuarios_papeis", {
-  usuarioId: uuid().notNull().references(() => usuarios.id),
-  papelId: uuid().notNull().references(() => papeis.id),
+    ...timestamps,
+  },
+  (t) => [
+    primaryKey({ columns: [t.usuarioId, t.papelId] }),
+    index("idx_usuarios_papeis_papel").on(t.papelId),
+  ]
+);
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-},
-  (tabela) => [
-    primaryKey({
-      columns: [
-        tabela.usuarioId,
-        tabela.papelId,
-     ]
-   })
- ]
-)
-
-
+// =====================================================================
 // CLASSES
-
+// =====================================================================
 
 export const classes = pgTable("classes", {
-  id: uuid().primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
 
   nome: varchar("nome", { length: 100 }).notNull(),
 
-  ordem: smallint("ordem").notNull(),
+  ordem: smallint("ordem").notNull().unique(),
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
+  ...timestamps,
+});
 
-
+// =====================================================================
 // ANOS LECTIVOS
+// =====================================================================
 
+export const anosLectivos = pgTable(
+  "anos_lectivos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
 
-export const anosLectivos = pgTable("anos_lectivos", {
-  id: uuid().primaryKey().defaultRandom(),
+    nome: varchar("nome", { length: 100 }).notNull(),
 
-  nome: varchar("nome", { length: 100 }).notNull(),
+    dataInicio: date("data_inicio").notNull(),
+    dataFim: date("data_fim").notNull(),
 
-  dataInicio: date("data_inicio"),
-  dataFim: date("data_fim"),
+    estado: boolean("estado").notNull().default(false),
 
-  estado: boolean("estado"),
+    ...timestamps,
+  },
+  (t) => [
+    check("anos_lectivos_datas_validas", sql`${t.dataFim} > ${t.dataInicio}`),
+    // Só pode existir UM ano lectivo ativo
+    uniqueIndex("uq_um_ano_lectivo_ativo")
+      .on(t.estado)
+      .where(sql`${t.estado} = true`),
+  ]
+);
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
-
-
+// =====================================================================
 // CURSOS
-
+// =====================================================================
 
 export const cursos = pgTable("cursos", {
-  id: uuid().primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
 
   nome: varchar("nome", { length: 100 }).notNull(),
   codigo: varchar("codigo", { length: 20 }).notNull().unique(),
 
-  estado: boolean("estado").default(true),
+  estado: boolean("estado").notNull().default(true),
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
+  ...timestamps,
+});
 
-// TURMAS
-
-export const turmas = pgTable("turmas", {
-  id: uuid().primaryKey().defaultRandom(),
-
-  nome: varchar("nome", { length: 100 }).notNull(),
-
-  codigo: varchar("codigo", { length: 20 }).notNull().unique(),
-
-  turno: enumTurno("turno").notNull(),
-
-  capacidade: integer("capacidade"),
-
-  anoLectivoId: uuid("ano_lectivo_id").notNull().references(() => anosLectivos.id),
-
-  cursoId: uuid("curso_id").notNull().references(() => cursos.id),
-
-  classeId: uuid("classe_id").notNull().references(() => classes.id),
-
-  estado: boolean("estado").default(true),
-
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
-
+// =====================================================================
 // DISCIPLINAS
+// =====================================================================
 
+export const disciplinas = pgTable(
+  "disciplinas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
 
-export const disciplinas = pgTable("disciplinas", {
-  id: uuid().primaryKey().defaultRandom(),
+    nome: varchar("nome", { length: 100 }).notNull(),
+    codigo: varchar("codigo", { length: 20 }).notNull().unique(),
 
-  nome: varchar("nome", { length: 100 }).notNull(),
+    cargaHoraria: integer("carga_horaria"),
 
-  codigo: varchar("codigo", { length: 20 }).notNull().unique(),
+    estado: boolean("estado").notNull().default(true),
 
-  cargaHoraria: integer("carga_horaria"),
+    ...timestamps,
+  },
+  (t) => [
+    check(
+      "disciplinas_carga_horaria_positiva",
+      sql`${t.cargaHoraria} IS NULL OR ${t.cargaHoraria} > 0`
+    ),
+  ]
+);
 
-  estado: boolean("estado").default(true),
+// =====================================================================
+// TURMAS
+// =====================================================================
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
+export const turmas = pgTable(
+  "turmas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
 
+    nome: varchar("nome", { length: 100 }).notNull(),
 
+    // Único por ano lectivo (o mesmo código pode repetir-se em anos diferentes)
+    codigo: varchar("codigo", { length: 20 }).notNull(),
+
+    turno: enumTurno("turno").notNull(),
+
+    capacidade: integer("capacidade"),
+
+    anoLectivoId: uuid("ano_lectivo_id")
+      .notNull()
+      .references(() => anosLectivos.id, { onDelete: "restrict" }),
+
+    cursoId: uuid("curso_id")
+      .notNull()
+      .references(() => cursos.id, { onDelete: "restrict" }),
+
+    classeId: uuid("classe_id")
+      .notNull()
+      .references(() => classes.id, { onDelete: "restrict" }),
+
+    estado: boolean("estado").notNull().default(true),
+
+    ...timestamps,
+  },
+  (t) => [
+    unique("uq_turmas_codigo_ano").on(t.codigo, t.anoLectivoId),
+    check(
+      "turmas_capacidade_positiva",
+      sql`${t.capacidade} IS NULL OR ${t.capacidade} > 0`
+    ),
+    index("idx_turmas_ano_lectivo").on(t.anoLectivoId),
+    index("idx_turmas_curso").on(t.cursoId),
+    index("idx_turmas_classe").on(t.classeId),
+  ]
+);
+
+// =====================================================================
 // ESTUDANTES
+// =====================================================================
 
 export const estudantes = pgTable("estudantes", {
-  id: uuid().primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
 
   numeroProcesso: serial("numero_processo").notNull().unique(),
 
-  perfilId: uuid("perfil_id").notNull().unique().references(() => perfis.id),
+  perfilId: uuid("perfil_id")
+    .notNull()
+    .unique()
+    .references(() => perfis.id, { onDelete: "restrict" }),
 
-  estado: boolean("estado").default(true),
+  estado: boolean("estado").notNull().default(true),
 
-  criadoEm: timestamp("criado_em").notNull().defaultNow(),
-  atualizadoEm: timestamp("atualizado_em").notNull().defaultNow().$onUpdate(() => new Date()),
-})
+  ...timestamps,
+  ...softDelete,
+});
 
-
+// =====================================================================
 // PROFESSORES
+// =====================================================================
 
 export const professores = pgTable("professores", {
-  id: uuid().primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
 
   numeroAgente: serial("numero_agente").notNull().unique(),
 
   perfilId: uuid("perfil_id")
     .notNull()
     .unique()
-    .references(() => perfis.id),
+    .references(() => perfis.id, { onDelete: "restrict" }),
 
   especialidade: varchar("especialidade", { length: 150 }),
 
   estado: boolean("estado").notNull().default(true),
 
-  criadoEm: timestamp("criado_em")
-    .notNull()
-    .defaultNow(),
-
-  atualizadoEm: timestamp("atualizado_em")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  ...timestamps,
+  ...softDelete,
 });
 
+// =====================================================================
+// TURMAS_DISCIPLINAS (currículo da turma: que disciplinas a turma tem)
+// =====================================================================
 
-// TURMAS_DISCIPLINAS
+export const turmasDisciplinas = pgTable(
+  "turmas_disciplinas",
+  {
+    turmaId: uuid("turma_id")
+      .notNull()
+      .references(() => turmas.id, { onDelete: "cascade" }),
 
-export const turmasDisciplinas = pgTable("turmas_disciplinas", {
-  turmaId: uuid("turma_id")
-    .notNull()
-    .references(() => turmas.id),
+    disciplinaId: uuid("disciplina_id")
+      .notNull()
+      .references(() => disciplinas.id, { onDelete: "restrict" }),
 
-  disciplinaId: uuid("disciplina_id")
-    .notNull()
-    .references(() => disciplinas.id),
-
-  criadoEm: timestamp("criado_em")
-    .notNull()
-    .defaultNow(),
-
-  atualizadoEm: timestamp("atualizado_em")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-
-},
-  (tabela) => [
-    primaryKey({
-      columns: [
-        tabela.turmaId,
-        tabela.disciplinaId,
-      ]
-    })
+    ...timestamps,
+  },
+  (t) => [
+    primaryKey({ columns: [t.turmaId, t.disciplinaId] }),
+    index("idx_turmas_disciplinas_disciplina").on(t.disciplinaId),
   ]
 );
 
-
-
+// =====================================================================
 // TURMAS_PROFESSORES_DISCIPLINAS
+// Só permite atribuir professor a disciplinas que a turma realmente tem
+// (FK composta para turmas_disciplinas).
+// =====================================================================
 
-export const turmasProfessoresDisciplinas = pgTable("turmas_professores_disciplinas", {
-  id: uuid().primaryKey().defaultRandom(),
+export const turmasProfessoresDisciplinas = pgTable(
+  "turmas_professores_disciplinas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
 
-  turmaId: uuid("turma_id")
-    .notNull()
-    .references(() => turmas.id),
+    turmaId: uuid("turma_id").notNull(),
 
-  professorId: uuid("professor_id")
-    .notNull()
-    .references(() => professores.id),
+    disciplinaId: uuid("disciplina_id").notNull(),
 
-  disciplinaId: uuid("disciplina_id")
-    .notNull()
-    .references(() => disciplinas.id),
+    professorId: uuid("professor_id")
+      .notNull()
+      .references(() => professores.id, { onDelete: "restrict" }),
 
-  criadoEm: timestamp("criado_em")
-    .notNull()
-    .defaultNow(),
+    ...timestamps,
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_tpd_turma_disciplina",
+      columns: [t.turmaId, t.disciplinaId],
+      foreignColumns: [turmasDisciplinas.turmaId, turmasDisciplinas.disciplinaId],
+    }).onDelete("cascade"),
 
-  atualizadoEm: timestamp("atualizado_em")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+    unique("uq_tpd_turma_professor_disciplina").on(
+      t.turmaId,
+      t.professorId,
+      t.disciplinaId
+    ),
+    index("idx_tpd_professor").on(t.professorId),
+    index("idx_tpd_turma_disciplina").on(t.turmaId, t.disciplinaId),
+  ]
+);
 
-},
-  (tabela) => [
-    unique().on(
-      tabela.turmaId,
-      tabela.professorId,
-      tabela.disciplinaId
-    )
+// =====================================================================
+// MATRÍCULAS
+// =====================================================================
+
+export const matriculas = pgTable(
+  "matriculas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    estudanteId: uuid("estudante_id")
+      .notNull()
+      .references(() => estudantes.id, { onDelete: "restrict" }),
+
+    turmaId: uuid("turma_id")
+      .notNull()
+      .references(() => turmas.id, { onDelete: "restrict" }),
+
+    dataMatricula: date("data_matricula")
+      .notNull()
+      .default(sql`CURRENT_DATE`),
+
+    estado: enumEstadoMatricula("estado").notNull().default("ATIVA"),
+
+    tipo: enumTipoMatricula("tipo").notNull(),
+
+    ...timestamps,
+  },
+  (t) => [
+    unique("uq_matriculas_estudante_turma").on(t.estudanteId, t.turmaId),
+
+    // Necessário para as FKs compostas de notas e faltas
+    // garantirem que a turma da nota/falta é a turma da matrícula
+    unique("uq_matriculas_id_turma").on(t.id, t.turmaId),
+
+    // O unique (estudanteId, turmaId) já cobre pesquisas por estudanteId
+    index("idx_matriculas_turma").on(t.turmaId),
+  ]
+);
+
+// =====================================================================
+// FALTAS
+// =====================================================================
+
+export const faltas = pgTable(
+  "faltas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    matriculaId: uuid("matricula_id").notNull(),
+
+    // Redundante de propósito: permite as FKs compostas abaixo
+    turmaId: uuid("turma_id").notNull(),
+
+    disciplinaId: uuid("disciplina_id").notNull(),
+
+    data: date("data").notNull(),
+
+    justificada: boolean("justificada").notNull().default(false),
+
+    motivo: text("motivo"),
+
+    registadoPorUsuarioId: uuid("registado_por_usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "restrict" }),
+
+    ...timestamps,
+  },
+  (t) => [
+    // A turma da falta tem de ser a turma da matrícula
+    foreignKey({
+      name: "fk_faltas_matricula_turma",
+      columns: [t.matriculaId, t.turmaId],
+      foreignColumns: [matriculas.id, matriculas.turmaId],
+    }).onDelete("restrict"),
+
+    // A disciplina tem de pertencer à turma
+    foreignKey({
+      name: "fk_faltas_turma_disciplina",
+      columns: [t.turmaId, t.disciplinaId],
+      foreignColumns: [turmasDisciplinas.turmaId, turmasDisciplinas.disciplinaId],
+    }).onDelete("restrict"),
+
+    // Se puderem existir várias aulas por dia, acrescenta o horário aqui
+    unique("uq_faltas_matricula_disciplina_data").on(
+      t.matriculaId,
+      t.disciplinaId,
+      t.data
+    ),
+
+    index("idx_faltas_matricula_data").on(t.matriculaId, t.data),
+    index("idx_faltas_turma_disciplina").on(t.turmaId, t.disciplinaId),
+    index("idx_faltas_registado_por").on(t.registadoPorUsuarioId),
+  ]
+);
+
+// =====================================================================
+// NOTAS
+// =====================================================================
+
+export const notas = pgTable(
+  "notas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    matriculaId: uuid("matricula_id").notNull(),
+
+    // Redundante de propósito: permite as FKs compostas abaixo
+    turmaId: uuid("turma_id").notNull(),
+
+    disciplinaId: uuid("disciplina_id").notNull(),
+
+    lancadoPorUsuarioId: uuid("lancado_por_usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "restrict" }),
+
+    tipo: enumTipoNota("tipo").notNull(),
+
+    // mode "number": o Drizzle devolve number em vez de string
+    valor: numeric("valor", { precision: 5, scale: 2, mode: "number" }).notNull(),
+
+    ...timestamps,
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_notas_matricula_turma",
+      columns: [t.matriculaId, t.turmaId],
+      foreignColumns: [matriculas.id, matriculas.turmaId],
+    }).onDelete("restrict"),
+
+    foreignKey({
+      name: "fk_notas_turma_disciplina",
+      columns: [t.turmaId, t.disciplinaId],
+      foreignColumns: [turmasDisciplinas.turmaId, turmasDisciplinas.disciplinaId],
+    }).onDelete("restrict"),
+
+    // Escala angolana 0–20
+    check("notas_valor_intervalo", sql`${t.valor} >= 0 AND ${t.valor} <= 20`),
+
+    // Se tiveres trimestres, acrescenta a coluna `trimestre` e inclui-a aqui
+    unique("uq_notas_matricula_disciplina_tipo").on(
+      t.matriculaId,
+      t.disciplinaId,
+      t.tipo
+    ),
+
+    // O unique (matriculaId, disciplinaId, tipo) já cobre pesquisas por matriculaId
+    index("idx_notas_turma_disciplina").on(t.turmaId, t.disciplinaId),
+    index("idx_notas_lancado_por").on(t.lancadoPorUsuarioId),
   ]
 );
 
 
+// =====================================================================
+// DOCUMENTOS
+// Guarda apenas os METADADOS. O ficheiro em si fica num armazenamento
+// externo (S3/R2/disco) e é referenciado por `chaveArmazenamento`.
+// =====================================================================
 
+export const documentos = pgTable(
+  "documentos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
 
-// MATRÍCULAS
+    // Dono do documento (serve para estudantes e professores)
+    perfilId: uuid("perfil_id")
+      .notNull()
+      .references(() => perfis.id, { onDelete: "restrict" }),
 
-export const matriculas = pgTable("matriculas", {
-  id: uuid().primaryKey().defaultRandom(),
+    // Opcional: documento associado a uma matrícula (ex.: comprovativo de pagamento)
+    matriculaId: uuid("matricula_id").references(() => matriculas.id, {
+      onDelete: "set null",
+    }),
 
-  estudanteId: uuid("estudante_id")
-    .notNull()
-    .references(() => estudantes.id),
+    tipo: enumTipoDocumento("tipo").notNull(),
 
-  turmaId: uuid("turma_id")
-    .notNull()
-    .references(() => turmas.id),
+    nomeOriginal: varchar("nome_original", { length: 255 }).notNull(),
 
-  dataMatricula: date("data_matricula")
-    .notNull()
-    .defaultNow(),
+    descricao: varchar("descricao", { length: 300 }),
 
-  estado: varchar("estado", { length: 30 })
-    .notNull()
-    .default("ATIVA"),
+    // Caminho/chave no armazenamento (nunca uma URL pública permanente)
+    chaveArmazenamento: text("chave_armazenamento").notNull().unique(),
 
-  tipo: varchar("tipo", { length: 30 })
-    .notNull(),
+    mimeType: varchar("mime_type", { length: 100 }).notNull(),
 
-  criadoEm: timestamp("criado_em")
-    .notNull()
-    .defaultNow(),
+    tamanhoBytes: integer("tamanho_bytes").notNull(),
 
-  atualizadoEm: timestamp("atualizado_em")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-},
-  (tabela) => [
-    unique().on(
-      tabela.estudanteId,
-      tabela.turmaId
-    )
-]
+    // SHA-256 em hexadecimal (64 caracteres) para verificar integridade
+    hashSha256: varchar("hash_sha256", { length: 64 }).notNull(),
+
+    // Validação pela secretaria
+    estado: enumEstadoDocumento("estado").notNull().default("PENDENTE"),
+
+    validadoPorUsuarioId: uuid("validado_por_usuario_id").references(
+      () => usuarios.id,
+      { onDelete: "restrict" }
+    ),
+
+    validadoEm: timestamp("validado_em", { withTimezone: true }),
+
+    motivoRejeicao: text("motivo_rejeicao"),
+
+    // Validade do próprio documento (ex.: BI com data de expiração)
+    dataValidade: date("data_validade"),
+
+    enviadoPorUsuarioId: uuid("enviado_por_usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "restrict" }),
+
+    ...timestamps,
+    ...softDelete,
+  },
+  (t) => [
+    check("documentos_tamanho_positivo", sql`${t.tamanhoBytes} > 0`),
+
+    check("documentos_hash_tamanho", sql`length(${t.hashSha256}) = 64`),
+
+    // Um documento VALIDADO tem de dizer quem validou e quando
+    check(
+      "documentos_validacao_coerente",
+      sql`${t.estado} <> 'VALIDADO' OR (${t.validadoPorUsuarioId} IS NOT NULL AND ${t.validadoEm} IS NOT NULL)`
+    ),
+
+    // Um documento REJEITADO tem de ter motivo
+    check(
+      "documentos_rejeicao_com_motivo",
+      sql`${t.estado} <> 'REJEITADO' OR ${t.motivoRejeicao} IS NOT NULL`
+    ),
+
+    index("idx_documentos_perfil_tipo").on(t.perfilId, t.tipo),
+    index("idx_documentos_matricula").on(t.matriculaId),
+    index("idx_documentos_enviado_por").on(t.enviadoPorUsuarioId),
+    index("idx_documentos_validado_por").on(t.validadoPorUsuarioId),
+  ]
 );
-
-
-// FALTAS
-
-export const faltas = pgTable("faltas", {
-  id: uuid().primaryKey().defaultRandom(),
-
-  matriculaId: uuid("matricula_id")
-    .notNull()
-    .references(() => matriculas.id),
-
-  disciplinaId: uuid("disciplina_id")
-    .notNull()
-    .references(() => disciplinas.id),
-
-  data: date("data")
-    .notNull(),
-
-  justificada: boolean("justificada")
-    .notNull()
-    .default(false),
-
-  motivo: text("motivo"),
-
-  registadoPorUsuarioId: uuid("registado_por_usuario_id")
-    .notNull()
-    .references(() => usuarios.id),
-
-  criadoEm: timestamp("criado_em")
-    .notNull()
-    .defaultNow(),
-
-  atualizadoEm: timestamp("atualizado_em")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
-
-
-
-// NOTAS
-
-export const notas = pgTable("notas", {
-  id: uuid().primaryKey().defaultRandom(),
-
-  matriculaId: uuid("matricula_id")
-    .notNull()
-    .references(() => matriculas.id),
-
-  disciplinaId: uuid("disciplina_id")
-    .notNull()
-    .references(() => disciplinas.id),
-
-  lancadoPorUsuarioId: uuid("lancado_por_usuario_id")
-    .notNull()
-    .references(() => usuarios.id),
-
-  tipo: varchar("tipo", { length: 50 })
-    .notNull(),
-
-  valor: numeric("valor", {
-    precision: 5,
-    scale: 2,
-  }).notNull(),
-
-  criadoEm: timestamp("criado_em")
-    .notNull()
-    .defaultNow(),
-
-  atualizadoEm: timestamp("atualizado_em")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
