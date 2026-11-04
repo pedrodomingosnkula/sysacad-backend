@@ -67,22 +67,6 @@ export const enumTipoNota = pgEnum("enum_tipo_nota", [
   "EXAME",
 ]);
 
-export const enumTipoDocumento = pgEnum("enum_tipo_documento", [
-  "BILHETE_IDENTIDADE",
-  "CERTIFICADO_HABILITACOES",
-  "DECLARACAO",
-  "CERTIDAO_NASCIMENTO",
-  "COMPROVATIVO_PAGAMENTO",
-  "FOTOGRAFIA",
-  "OUTRO",
-]);
-
-export const enumEstadoDocumento = pgEnum("enum_estado_documento", [
-  "PENDENTE",
-  "VALIDADO",
-  "REJEITADO",
-]);
-
 // =====================================================================
 // USUÁRIOS
 // =====================================================================
@@ -560,11 +544,9 @@ export const notas = pgTable(
   ]
 );
 
-
 // =====================================================================
-// DOCUMENTOS
-// Guarda apenas os METADADOS. O ficheiro em si fica num armazenamento
-// externo (S3/R2/disco) e é referenciado por `chaveArmazenamento`.
+// DOCUMENTOS (do estudante, por matrícula)
+// Guarda só o registo; o ficheiro em si fica no armazenamento (disco/S3).
 // =====================================================================
 
 export const documentos = pgTable(
@@ -572,74 +554,20 @@ export const documentos = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    // Dono do documento (serve para estudantes e professores)
-    perfilId: uuid("perfil_id")
+    // A matrícula já identifica o estudante, a turma e o ano lectivo
+    matriculaId: uuid("matricula_id")
       .notNull()
-      .references(() => perfis.id, { onDelete: "restrict" }),
+      .references(() => matriculas.id, { onDelete: "restrict" }),
 
-    // Opcional: documento associado a uma matrícula (ex.: comprovativo de pagamento)
-    matriculaId: uuid("matricula_id").references(() => matriculas.id, {
-      onDelete: "set null",
-    }),
+    // Ex.: "Bilhete de Identidade", "Certificado", "Declaração"
+    tipo: varchar("tipo", { length: 50 }).notNull(),
 
-    tipo: enumTipoDocumento("tipo").notNull(),
+    nome: varchar("nome", { length: 255 }).notNull(),
 
-    nomeOriginal: varchar("nome_original", { length: 255 }).notNull(),
-
-    descricao: varchar("descricao", { length: 300 }),
-
-    // Caminho/chave no armazenamento (nunca uma URL pública permanente)
-    chaveArmazenamento: text("chave_armazenamento").notNull().unique(),
-
-    mimeType: varchar("mime_type", { length: 100 }).notNull(),
-
-    tamanhoBytes: integer("tamanho_bytes").notNull(),
-
-    // SHA-256 em hexadecimal (64 caracteres) para verificar integridade
-    hashSha256: varchar("hash_sha256", { length: 64 }).notNull(),
-
-    // Validação pela secretaria
-    estado: enumEstadoDocumento("estado").notNull().default("PENDENTE"),
-
-    validadoPorUsuarioId: uuid("validado_por_usuario_id").references(
-      () => usuarios.id,
-      { onDelete: "restrict" }
-    ),
-
-    validadoEm: timestamp("validado_em", { withTimezone: true }),
-
-    motivoRejeicao: text("motivo_rejeicao"),
-
-    // Validade do próprio documento (ex.: BI com data de expiração)
-    dataValidade: date("data_validade"),
-
-    enviadoPorUsuarioId: uuid("enviado_por_usuario_id")
-      .notNull()
-      .references(() => usuarios.id, { onDelete: "restrict" }),
+    // Onde o ficheiro está guardado
+    caminho: text("caminho").notNull().unique(),
 
     ...timestamps,
-    ...softDelete,
   },
-  (t) => [
-    check("documentos_tamanho_positivo", sql`${t.tamanhoBytes} > 0`),
-
-    check("documentos_hash_tamanho", sql`length(${t.hashSha256}) = 64`),
-
-    // Um documento VALIDADO tem de dizer quem validou e quando
-    check(
-      "documentos_validacao_coerente",
-      sql`${t.estado} <> 'VALIDADO' OR (${t.validadoPorUsuarioId} IS NOT NULL AND ${t.validadoEm} IS NOT NULL)`
-    ),
-
-    // Um documento REJEITADO tem de ter motivo
-    check(
-      "documentos_rejeicao_com_motivo",
-      sql`${t.estado} <> 'REJEITADO' OR ${t.motivoRejeicao} IS NOT NULL`
-    ),
-
-    index("idx_documentos_perfil_tipo").on(t.perfilId, t.tipo),
-    index("idx_documentos_matricula").on(t.matriculaId),
-    index("idx_documentos_enviado_por").on(t.enviadoPorUsuarioId),
-    index("idx_documentos_validado_por").on(t.validadoPorUsuarioId),
-  ]
+  (t) => [index("idx_documentos_matricula").on(t.matriculaId)]
 );

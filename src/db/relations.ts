@@ -1,5 +1,5 @@
 import { defineRelations } from "drizzle-orm";
-import * as schema from "./schema.js";
+import * as schema from "./schema";
 
 // Drizzle v1 (RQB v2): npm i drizzle-orm@rc && npm i -D drizzle-kit@rc
 // As relations existem só ao nível da aplicação; as FKs reais estão no schema.ts.
@@ -40,10 +40,6 @@ export const relations = defineRelations(schema, (r) => ({
     professor: r.one.professores({
       from: r.perfis.id,
       to: r.professores.perfilId,
-    }),
-    documentos: r.many.documentos({
-      from: r.perfis.id,
-      to: r.documentos.perfilId,
     }),
   },
 
@@ -203,70 +199,9 @@ export const relations = defineRelations(schema, (r) => ({
   // DOCUMENTOS
   // ---------------------------------------------------------------
   documentos: {
-    perfil: r.one.perfis({
-      from: r.documentos.perfilId,
-      to: r.perfis.id,
-      optional: false,
-    }),
-    // Nullable: nem todo o documento está ligado a uma matrícula
     matricula: r.one.matriculas({
       from: r.documentos.matriculaId,
       to: r.matriculas.id,
-    }),
-    enviadoPor: r.one.usuarios({
-      from: r.documentos.enviadoPorUsuarioId,
-      to: r.usuarios.id,
-      optional: false,
-    }),
-    // Nullable: só preenchido depois da validação
-    validadoPor: r.one.usuarios({
-      from: r.documentos.validadoPorUsuarioId,
-      to: r.usuarios.id,
-    }),
-  },
-
-  faltas: {
-    matricula: r.one.matriculas({
-      from: r.faltas.matriculaId,
-      to: r.matriculas.id,
-      optional: false,
-    }),
-    disciplina: r.one.disciplinas({
-      from: r.faltas.disciplinaId,
-      to: r.disciplinas.id,
-      optional: false,
-    }),
-    turmaDisciplina: r.one.turmasDisciplinas({
-      from: [r.faltas.turmaId, r.faltas.disciplinaId],
-      to: [r.turmasDisciplinas.turmaId, r.turmasDisciplinas.disciplinaId],
-      optional: false,
-    }),
-    registadoPor: r.one.usuarios({
-      from: r.faltas.registadoPorUsuarioId,
-      to: r.usuarios.id,
-      optional: false,
-    }),
-  },
-
-  notas: {
-    matricula: r.one.matriculas({
-      from: r.notas.matriculaId,
-      to: r.matriculas.id,
-      optional: false,
-    }),
-    disciplina: r.one.disciplinas({
-      from: r.notas.disciplinaId,
-      to: r.disciplinas.id,
-      optional: false,
-    }),
-    turmaDisciplina: r.one.turmasDisciplinas({
-      from: [r.notas.turmaId, r.notas.disciplinaId],
-      to: [r.turmasDisciplinas.turmaId, r.turmasDisciplinas.disciplinaId],
-      optional: false,
-    }),
-    lancadoPor: r.one.usuarios({
-      from: r.notas.lancadoPorUsuarioId,
-      to: r.usuarios.id,
       optional: false,
     }),
   },
